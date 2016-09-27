@@ -13,7 +13,7 @@ import java.util.stream.Collectors;
 /**
  * Created by svetlana on 25.09.16.
  */
-public class Factory {
+public class Factory implements Factorable {
 
     private final Package basePackage;
     private Map<Class<?>, List<Object>> beans = new HashMap<>();
@@ -81,10 +81,10 @@ public class Factory {
         Class<?> intrf[] = c.getInterfaces();
 
         if(superCls != null) {
+            obtainGraphHelper2(superCls, result);
             result.add(superCls);
         }
         Arrays.stream(intrf).forEach(result::add);
-
         for (Class<?> i : intrf) {
             obtainGraphHelper2(i, result);
         }
@@ -129,7 +129,7 @@ public class Factory {
                     .ifPresent(e -> result.add(i.getKey()));
         }
         if (result.size() > 1) {
-            throw new RuntimeException("More than one candidate have been find!");
+            throw new RuntimeException("More than one candidate have been found!");
         }
         if (result.isEmpty()) {
             throw new RuntimeException("Could not find dependency: " + d.toString());
@@ -167,7 +167,7 @@ public class Factory {
         return path -> basePackage.getName() + "." + path.toString()
                 .substring(basePath.toString().length())
                 .replace(".class", "")
-                .replace("/", ".").substring(1);
+                .replace(File.separator, ".").substring(1);
     }
 
     private void setDepends(Object bean, List<Field> dependsOrig) throws IllegalAccessException {
@@ -176,6 +176,15 @@ public class Factory {
             List<Object> dep = beans.get(fc);
             f.setAccessible(true);
             f.set(bean, dep.get(0));
+            f.setAccessible(false);
         }
+    }
+
+    public void close() {
+        //TODO: PreDestroy
+    }
+
+    public void registryShutdownHook() {
+        //close();
     }
 }

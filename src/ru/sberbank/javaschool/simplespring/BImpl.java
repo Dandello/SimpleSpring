@@ -5,6 +5,7 @@ package ru.sberbank.javaschool.simplespring;
  */
 @Component
 public class BImpl implements B{
+
     @Override
     public String getSomeData() {
         return "BImpl";
