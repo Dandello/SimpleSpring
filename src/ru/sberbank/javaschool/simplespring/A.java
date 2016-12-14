@@ -19,7 +19,7 @@ public class A { //TODO: не абстрактный и не интерфейс
 
     @PostConstruct
     public void init() {
-        //TODO: some logic
+        System.out.println("construction of class A");
     }
 
     public void execute() {
@@ -29,7 +29,7 @@ public class A { //TODO: не абстрактный и не интерфейс
 
     @PreDestroy
     public void destroy() {
-        //TODO: some logic
+        System.out.println("destruction of class A");
     }
 
 }

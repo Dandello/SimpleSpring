@@ -20,7 +20,7 @@ public class Test {
         Factorable f = Factory.createNew(ru.sberbank.javaschool.simplespring.Test.class);
         f.registryShutdownHook();
 
-        //Object o = f.getBean(Object.class);
+      //  Object o = f.getBean(Object.class);
 
         A a = f.getBean(A.class);
         a.execute();

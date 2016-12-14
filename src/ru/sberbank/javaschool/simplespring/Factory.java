@@ -1,7 +1,11 @@
 package ru.sberbank.javaschool.simplespring;
 
 import java.io.IOException;
+import java.lang.annotation.Annotation;
 import java.lang.reflect.Field;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
@@ -16,6 +20,8 @@ import java.util.stream.Collectors;
 public class Factory implements Factorable {
 
     private final Package basePackage;
+    private final List<Object> allObjects = new ArrayList<>();
+
     private Map<Class<?>, List<Object>> beans = new HashMap<>();
 
     private Factory(Class<?> markerClass) {
@@ -51,14 +57,47 @@ public class Factory implements Factorable {
 
         final List<Class<?>> classes = getAllClassesByPredicate(baseFile, c ->
                 c.isAnnotationPresent(Component.class));
+        for (Class<?> cl : classes) {
+            if (cl.isInterface())
+                throw new RuntimeException("Bean cannot be an interface! Check your components and try again!");
+            if(Modifier.isAbstract(cl.getModifiers()))
+                throw new RuntimeException("Bean cannot be an abstract class! Check your components and try again!");
+        }
 
-        final Map<Class<?>, List<Class<?>>> beansTypes = obtainGraph(classes);
+        final Map<Class<?>, List<Class<?>>> beansTypes = obtainGraph(classes); // все связанные предки и интерфейсы
+        for(Class<?> c : classes)
+            checkCyclicDep(c, c, beansTypes);
 
         for (Class<?> c : classes) {
             if (!beans.containsKey(c)) {
                 createObjectAndReg(c, beansTypes);
             }
         }
+        beans.values().stream().forEach(valueList -> allObjects.addAll(valueList.stream().filter(value -> !allObjects.contains(value)).collect(Collectors.toList())));
+        allObjects.forEach(object -> invokeAnnotationMethod(object, PostConstruct.class));
+
+    }
+
+    private  void checkCyclicDep(Class<?> templateCls, Class<?> beanCls, Map<Class<?>, List<Class<?>>> beansTypes) {
+        List<Field> fields = getAllDependsFor(beanCls);
+        List<Field> childFields = new ArrayList<>();
+        for(Field field : fields) {
+            childFields.addAll(getChildFields(field.getType(), beansTypes));
+        }
+        childFields = childFields.stream().distinct().collect(Collectors.toList());
+        for(Field childField : childFields) {
+            if (childField.getType() == templateCls)
+                throw new RuntimeException("There is the circular dependency in your project!");
+            checkCyclicDep(templateCls, childField.getType(), beansTypes);
+        }
+
+
+    }
+
+    private List<Field> getChildFields(Class<?> parentClass, Map<Class<?>, List<Class<?>>> beansTypes) {
+        Class<?> childClass = findBeanClsFor(parentClass, beansTypes);
+        return getAllDependsFor(childClass);
+
     }
 
     private Map<Class<?>, List<Class<?>>> obtainGraph(List<Class<?>> classes) {
@@ -92,10 +131,12 @@ public class Factory implements Factorable {
 
     private void createObjectAndReg(Class<?> beanCls, Map<Class<?>, List<Class<?>>> beansTypes)
             throws IllegalAccessException, InstantiationException {
-
+        /* вызывается для каждого бина из init*/
         final List<Field> dependsOrig = getAllDependsFor(beanCls);
+       // System.out.println(dependsOrig);
         for (Field f : dependsOrig) {
             Class<?> depBeanCls = findBeanClsFor(f.getType(), beansTypes);
+         //   System.out.println(depBeanCls);
             if (!beans.containsKey(depBeanCls)) {
                 createObjectAndReg(depBeanCls, beansTypes);
             }
@@ -137,7 +178,7 @@ public class Factory implements Factorable {
         return result.get(0);
     }
 
-    private List<Field> getAllDependsFor(Class<?> c) {
+    private List<Field> getAllDependsFor(Class<?> c) { // вызываем из createObjectAndReg
         return Arrays.stream(c.getDeclaredFields())
                 .filter(f -> f.isAnnotationPresent(Autowired.class))
                 .collect(Collectors.toList());
@@ -180,8 +221,21 @@ public class Factory implements Factorable {
         }
     }
 
+    void invokeAnnotationMethod(Object bean, Class<? extends Annotation> annotation) {
+        for(Method method : bean.getClass().getDeclaredMethods())
+            if(method.isAnnotationPresent(annotation) && method.getReturnType().equals(Void.TYPE) && method.getParameterCount()==0) {
+                if(!method.isAccessible())
+                    method.setAccessible(true);
+                try {
+                    method.invoke(bean);
+                } catch (IllegalAccessException | InvocationTargetException e) {
+                    throw new RuntimeException(e);
+                }
+            }
+    }
+
     public void close() {
-        //TODO: PreDestroy
+        allObjects.forEach(object -> invokeAnnotationMethod(object, PreDestroy.class));
     }
 
     public void registryShutdownHook() {

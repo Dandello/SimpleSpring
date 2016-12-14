@@ -9,9 +9,6 @@ import ru.sberbank.javaschool.simplespring.D;
  */
 @Component
 public class CImlp implements D {
-
     @Override
-    public String getSomeStr() {
-        return "CImpl";
-    }
+    public String getSomeStr() {return "CImpl";}
 }
